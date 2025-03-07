@@ -106,6 +106,7 @@ class Mapper(SLAMParameters):
         self.final_pose = slam.final_pose
         self.demo = slam.demo
         self.is_mapping_process_started = slam.is_mapping_process_started
+        self.mapping_ok = slam.mapping_ok
     
     def run(self):
         self.mapping()
@@ -136,6 +137,7 @@ class Mapper(SLAMParameters):
         self.gaussians.active_sh_degree = self.gaussians.max_sh_degree
         self.is_tracking_keyframe_shared[0] = 0
         
+        
         if self.demo[0]:
             a = time.time()
             while (time.time()-a)<30.:
@@ -154,11 +156,14 @@ class Mapper(SLAMParameters):
 
 
         new_keyframe = False
+        has_rendered=0
         while True:
             
             
             if render_num%1000 == 0:
                 print(render_num)
+
+            
             
             # if self.end_of_dataset[0] and render_num>29999:
                 # break
@@ -170,7 +175,8 @@ class Mapper(SLAMParameters):
                 self.run_viewer()       
             
             if self.is_tracking_keyframe_shared[0]:
-                # print("iter1_num: ",iter1_num)
+                has_rendered=0
+                print("iter1_num: ",iter1_num)
                 iter1_num = 0
                 # get shared gaussians
                 points, colors, rots, scales, z_values, trackable_filter = self.shared_new_gaussians.get_values()
@@ -193,7 +199,9 @@ class Mapper(SLAMParameters):
                 self.is_tracking_keyframe_shared[0] = 0
 
             elif self.is_mapping_keyframe_shared[0]:
-                # print("iter1_num: ",iter1_num)
+                has_rendered=0
+                print("iter1_num: ",iter1_num)
+
                 iter1_num = 0
                 # get shared gaussians
                 points, colors, rots, scales, z_values, _ = self.shared_new_gaussians.get_values()
@@ -208,74 +216,86 @@ class Mapper(SLAMParameters):
                 self.keyframe_idxs.append(newcam.cam_idx[0])
                 self.new_keyframes.append(len(self.mapping_cams)-1)
                 self.is_mapping_keyframe_shared[0] = 0
-        
-            if len(self.mapping_cams)>0:
-                
-                # train once on new keyframe, and random
-                if len(self.new_keyframes) > 0:
-                    train_idx = self.new_keyframes.pop(0)
-                    viewpoint_cam = self.mapping_cams[train_idx]
-                    new_keyframe = True
-                else:
-                    train_idx = random.choice(range(len(self.mapping_cams)))
-                    viewpoint_cam = self.mapping_cams[train_idx]
-                
-                if self.training_stage==0:
-                    gt_image = viewpoint_cam.original_image.cuda()
-                    gt_depth_image = viewpoint_cam.original_depth_image.cuda()
-                elif self.training_stage==1:
-                    gt_image = viewpoint_cam.rgb_level_1.cuda()
-                    gt_depth_image = viewpoint_cam.depth_level_1.cuda()
-                elif self.training_stage==2:
-                    gt_image = viewpoint_cam.rgb_level_2.cuda()
-                    gt_depth_image = viewpoint_cam.depth_level_2.cuda()
-                
-                self.training=True
-                render_pkg = render_3(viewpoint_cam, self.gaussians, self.pipe, self.background, training_stage=self.training_stage)
-                iter1_num += 1
-                render_num = render_num + 1
-                depth_image = render_pkg["render_depth"]
-                image = render_pkg["render"]
-                viewspace_point_tensor, visibility_filter, radii = render_pkg["viewspace_points"], render_pkg["visibility_filter"], render_pkg["radii"]
-                
-                mask = (gt_depth_image>0.)
-                mask = mask.detach()
-                # color_mask = torch.tile(mask, (3,1,1))
-                gt_image = gt_image * mask
-                
-                # Loss
-                Ll1_map, Ll1 = l1_loss(image, gt_image)
-                L_ssim_map, L_ssim = ssim(image, gt_image)
 
-                d_max = 10.
-                Ll1_d_map, Ll1_d = l1_loss(depth_image/d_max, gt_depth_image/d_max)
 
-                loss_rgb = (1.0 - self.lambda_dssim) * Ll1 + self.lambda_dssim * (1.0 - L_ssim)
-                loss_d = Ll1_d
-                
-                loss = loss_rgb + 0.1*loss_d
-                
-                loss.backward()
-                with torch.no_grad():
-                    if self.train_iter % 200 == 0:  # 200
-                        self.gaussians.prune_large_and_transparent(0.005, self.prune_th)
-                    
-                    self.gaussians.optimizer.step()
-                    self.gaussians.optimizer.zero_grad(set_to_none = True)
-                    
-                    if new_keyframe and self.rerun_viewer:
-                        current_i = copy.deepcopy(self.iter_shared[0])
-                        rgb_np = image.cpu().numpy().transpose(1,2,0)
-                        rgb_np = np.clip(rgb_np, 0., 1.0) * 255
-                        # rr.set_time_sequence("step", current_i)
-                        rr.set_time_seconds("log_time", time.time() - self.total_start_time_viewer)
-                        rr.log("rendered_rgb", rr.Image(rgb_np))
-                        new_keyframe = False
+            # if len(self.mapping_cams)==0:
+            #     self.mapping_ok[0] = 1
+            if len(self.mapping_cams)>0 and has_rendered==0:
+                for i in range(20):
+                    # while self.mapping_ok[0]:
+                    #     time.sleep(1e-15)
+
+
+
+                    # if iter1_num>10:
+                    #     self.mapping_ok[0] = 1
                         
-                self.training = False
-                self.train_iter += 1
-                # torch.cuda.empty_cache()
-            
+                    # train once on new keyframe, and random
+                    if len(self.new_keyframes) > 0:
+                        train_idx = self.new_keyframes.pop(0)
+                        viewpoint_cam = self.mapping_cams[train_idx]
+                        new_keyframe = True
+                    else:
+                        train_idx = random.choice(range(len(self.mapping_cams)))
+                        viewpoint_cam = self.mapping_cams[train_idx]
+                    
+                    if self.training_stage==0:
+                        gt_image = viewpoint_cam.original_image.cuda()
+                        gt_depth_image = viewpoint_cam.original_depth_image.cuda()
+                    elif self.training_stage==1:
+                        gt_image = viewpoint_cam.rgb_level_1.cuda()
+                        gt_depth_image = viewpoint_cam.depth_level_1.cuda()
+                    elif self.training_stage==2:
+                        gt_image = viewpoint_cam.rgb_level_2.cuda()
+                        gt_depth_image = viewpoint_cam.depth_level_2.cuda()
+                    
+                    self.training=True
+                    render_pkg = render_3(viewpoint_cam, self.gaussians, self.pipe, self.background, training_stage=self.training_stage)
+
+                    iter1_num += 1
+                    render_num = render_num + 1
+                    depth_image = render_pkg["render_depth"]
+                    image = render_pkg["render"]
+                    viewspace_point_tensor, visibility_filter, radii = render_pkg["viewspace_points"], render_pkg["visibility_filter"], render_pkg["radii"]
+                    
+                    mask = (gt_depth_image>0.)
+                    mask = mask.detach()
+                    # color_mask = torch.tile(mask, (3,1,1))
+                    gt_image = gt_image * mask
+                    
+                    # Loss
+                    Ll1_map, Ll1 = l1_loss(image, gt_image)
+                    L_ssim_map, L_ssim = ssim(image, gt_image)
+
+                    d_max = 10.
+                    Ll1_d_map, Ll1_d = l1_loss(depth_image/d_max, gt_depth_image/d_max)
+
+                    loss_rgb = (1.0 - self.lambda_dssim) * Ll1 + self.lambda_dssim * (1.0 - L_ssim)
+                    loss_d = Ll1_d
+                    
+                    loss = loss_rgb + 0.1*loss_d
+                    
+                    loss.backward()
+                    with torch.no_grad():
+                        if self.train_iter % 200 == 0:  # 200
+                            self.gaussians.prune_large_and_transparent(0.005, self.prune_th)
+                        
+                        self.gaussians.optimizer.step()
+                        self.gaussians.optimizer.zero_grad(set_to_none = True)
+                        
+                        if new_keyframe and self.rerun_viewer:
+                            current_i = copy.deepcopy(self.iter_shared[0])
+                            rgb_np = image.cpu().numpy().transpose(1,2,0)
+                            rgb_np = np.clip(rgb_np, 0., 1.0) * 255
+                            # rr.set_time_sequence("step", current_i)
+                            rr.set_time_seconds("log_time", time.time() - self.total_start_time_viewer)
+                            rr.log("rendered_rgb", rr.Image(rgb_np))
+                            new_keyframe = False
+                            
+                    self.training = False
+                    self.train_iter += 1
+                    # torch.cuda.empty_cache()
+                has_rendered=1
             
         if self.verbose:
             while True:

@@ -93,6 +93,8 @@ class GS_ICP_SLAM(SLAMParameters):
         self.demo = torch.zeros((1)).int()
         self.is_mapping_process_started = torch.zeros((1)).int()
         self.iter_shared = torch.zeros((1)).int()
+        self.mapping_ok = torch.zeros((1)).int()
+        
         
         self.shared_cam.share_memory()
         self.shared_new_points.share_memory()
@@ -107,6 +109,8 @@ class GS_ICP_SLAM(SLAMParameters):
         self.demo.share_memory_()
         self.is_mapping_process_started.share_memory_()
         self.iter_shared.share_memory_()
+        self.mapping_ok.share_memory_()
+        
         
         self.demo[0] = args.demo
         self.mapper = Mapper(self)

@@ -96,6 +96,8 @@ class Tracker(SLAMParameters):
         self.final_pose = slam.final_pose
         self.demo = slam.demo
         self.is_mapping_process_started = slam.is_mapping_process_started
+        self.mapping_ok = slam.mapping_ok
+        
     
     def run(self):
         self.tracking()
@@ -410,7 +412,7 @@ class Tracker(SLAMParameters):
         print("colmap_saverd")
 
         ate_list = []
-
+        self.mapping_ok[0] = 1
         for ii in range(self.num_images):
             self.iter_shared[0] = ii
             current_image = self.rgb_images.pop(0)
@@ -427,7 +429,7 @@ class Tracker(SLAMParameters):
             # GICP
             if self.iteration_images == 0:
                 current_pose = self.poses[-1]
-                
+
                 if self.rerun_viewer:
                     # rr.set_time_sequence("step", self.iteration_images)
                     rr.set_time_seconds("log_time", time.time() - self.total_start_time)
@@ -491,6 +493,9 @@ class Tracker(SLAMParameters):
                     rr.set_time_seconds("log_time", time.time() - self.total_start_time)
                     rr.log(f"pt/trackable/{self.iteration_images}", rr.Points3D(points, colors=colors, radii=0.02))
             else:
+                # while not self.mapping_ok[0]:
+                #     time.sleep(1e-15)
+                # self.mapping_ok[0] = 0
                 self.reg.set_input_source(points)
                 num_trackable_points = trackable_filter.shape[0]
                 input_filter = np.zeros(points.shape[0], dtype=np.int32)
