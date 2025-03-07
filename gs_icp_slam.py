@@ -232,17 +232,37 @@ if __name__ == "__main__":
     parser.add_argument("--dataset_path", help="dataset path", default="dataset/Replica/room0")
     parser.add_argument("--config", help="caminfo", default="configs/Replica/caminfo.txt")
     parser.add_argument("--output_path", help="output path", default="output/room0")
-    parser.add_argument("--keyframe_th", default=0.7)
+
+    # parser.add_argument("--keyframe_th", default=0.019)
+
+    # parser.add_argument("--keyframe_th", default=0.7) #replica
+    parser.add_argument("--keyframe_th", default=0.81)#tum
     parser.add_argument("--knn_maxd", default=99999.0)
     parser.add_argument("--verbose", action='store_true', default=False)
     parser.add_argument("--demo", action='store_true', default=False)
-    parser.add_argument("--overlapped_th", default=5e-4)
-    parser.add_argument("--max_correspondence_distance", default=0.02)
-    parser.add_argument("--trackable_opacity_th", default=0.05)
-    parser.add_argument("--overlapped_th2", default=5e-5)
-    parser.add_argument("--downsample_rate", default=10)
+    # parser.add_argument("--overlapped_th", default=5e-4)
+    parser.add_argument("--overlapped_th", default=1e-3)#tum
+
+    # parser.add_argument("--max_correspondence_distance", default=0.01)
+
+    # parser.add_argument("--max_correspondence_distance", default=0.02) #REPLICA
+    parser.add_argument("--max_correspondence_distance", default=0.03)#tum
+
+    # parser.add_argument("--trackable_opacity_th", default=0.01)
+
+    # parser.add_argument("--trackable_opacity_th", default=0.05) #replica
+    parser.add_argument("--trackable_opacity_th", default=0.09) #tum
+
+    # parser.add_argument("--overlapped_th2", default=0.1e-5)
+
+    # parser.add_argument("--overlapped_th2", default=5e-5) #replica
+    parser.add_argument("--overlapped_th2", default=1e-3)#tum
+
+
+    # parser.add_argument("--downsample_rate", default=10)#replica
+    parser.add_argument("--downsample_rate", default=5)#tum
     parser.add_argument("--test", default=None)
-    parser.add_argument("--save_results", action='store_true', default=None)
+    parser.add_argument("--save_results", action='store_true', default=True)
     parser.add_argument("--rerun_viewer", action="store_true", default=False)
     args = parser.parse_args()
 

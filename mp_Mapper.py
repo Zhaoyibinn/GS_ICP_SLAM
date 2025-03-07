@@ -149,16 +149,29 @@ class Mapper(SLAMParameters):
         self.mapping_cams.append(newcam)
         self.keyframe_idxs.append(newcam.cam_idx[0])
         self.new_keyframes.append(len(self.mapping_cams)-1)
+        render_num = 0
+        iter1_num = 0
+
 
         new_keyframe = False
         while True:
+            
+            
+            if render_num%1000 == 0:
+                print(render_num)
+            
+            # if self.end_of_dataset[0] and render_num>29999:
+                # break
+
             if self.end_of_dataset[0]:
                 break
- 
+            
             if self.verbose:
                 self.run_viewer()       
             
             if self.is_tracking_keyframe_shared[0]:
+                # print("iter1_num: ",iter1_num)
+                iter1_num = 0
                 # get shared gaussians
                 points, colors, rots, scales, z_values, trackable_filter = self.shared_new_gaussians.get_values()
                 
@@ -180,6 +193,8 @@ class Mapper(SLAMParameters):
                 self.is_tracking_keyframe_shared[0] = 0
 
             elif self.is_mapping_keyframe_shared[0]:
+                # print("iter1_num: ",iter1_num)
+                iter1_num = 0
                 # get shared gaussians
                 points, colors, rots, scales, z_values, _ = self.shared_new_gaussians.get_values()
                 
@@ -217,7 +232,8 @@ class Mapper(SLAMParameters):
                 
                 self.training=True
                 render_pkg = render_3(viewpoint_cam, self.gaussians, self.pipe, self.background, training_stage=self.training_stage)
-                
+                iter1_num += 1
+                render_num = render_num + 1
                 depth_image = render_pkg["render_depth"]
                 image = render_pkg["render"]
                 viewspace_point_tensor, visibility_filter, radii = render_pkg["viewspace_points"], render_pkg["visibility_filter"], render_pkg["radii"]
@@ -259,6 +275,8 @@ class Mapper(SLAMParameters):
                 self.training = False
                 self.train_iter += 1
                 # torch.cuda.empty_cache()
+            
+            
         if self.verbose:
             while True:
                 self.run_viewer(False)
@@ -342,7 +360,11 @@ class Mapper(SLAMParameters):
         image_names, depth_image_names = self.get_image_dirs(self.dataset_path)
         final_poses = self.final_pose
         fig, axs = plt.subplots(1, 2, figsize=(10, 5))
-        
+        if not os.path.exists(f"{self.output_path}/rendered/rgb"):  # 检查文件夹是否存在
+            os.makedirs(f"{self.output_path}/rendered/rgb")  # 如果不存在，创建文件夹
+
+        if not os.path.exists(f"{self.output_path}/rendered/depth"):  # 检查文件夹是否存在
+            os.makedirs(f"{self.output_path}/rendered/depth")  # 如果不存在，创建文件夹
         with torch.no_grad():
             for i in tqdm(range(len(image_names))):
                 gt_depth_ = []
@@ -379,7 +401,19 @@ class Mapper(SLAMParameters):
                 
                 cam.update_matrix()
                 # rendered rgb
-                ours_rgb_ = render(cam, self.gaussians, self.pipe, self.background)["render"]
+                ours_pag = render(cam, self.gaussians, self.pipe, self.background)
+                ours_rgb_ = ours_pag["render"]
+                ours_depth_ = ours_pag["render_depth"]
+
+                rgb_name = f"{self.output_path}/rendered/rgb/{i}.png"
+                depth_name = f"{self.output_path}/rendered/depth/depth{i}.tiff"
+
+                
+
+                # cv2.imwrite(rgb_name,cv2.cvtColor(np.transpose(np.array(ours_rgb_.cpu().detach()), (1, 2, 0)) * 255, cv2.COLOR_RGB2BGR))
+                # cv2.imwrite(depth_name,np.array(ours_depth_.cpu().detach())[0])
+
+
                 ours_rgb_ = torch.clamp(ours_rgb_, 0., 1.).cuda()
                 
                 valid_depth_mask_ = (gt_depth_>0)

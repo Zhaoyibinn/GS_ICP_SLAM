@@ -112,7 +112,8 @@ class MappingCam(nn.Module):
 class MiniCam:
     def __init__(self, width, height, fovy, fovx, znear, zfar, world_view_transform, full_proj_transform):
         self.image_width = width
-        self.image_height = height    
+        self.image_heigh
+        t = height    
         self.FoVy = fovy
         self.FoVx = fovx
         self.znear = znear

@@ -1,5 +1,5 @@
 OUTPUT_PATH="experiments/results"
-DATASET_PATH="dataset/TUM"
+DATASET_PATH="dataset/2dgs/tum"
 
 str_pad() {
 
@@ -53,6 +53,17 @@ run_()
     local downsample_rate=${10}
     
     echo "run $dataset"
+    echo " python -W ignore gs_icp_slam.py --dataset_path $DATASET_PATH/$dataset\
+                                    --config $config\
+                                    --output_path $OUTPUT_PATH\
+                                    --keyframe_th $keyframe_th\
+                                    --knn_maxd $knn_maxd\
+                                    --overlapped_th $overlapped_th\
+                                    --max_correspondence_distance $max_correspondence_distance\
+                                    --trackable_opacity_th $trackable_opacity_th\
+                                    --overlapped_th2 $overlapped_th2\
+                                    --downsample_rate $downsample_rate\
+                                    --save_results"
     python -W ignore gs_icp_slam.py --dataset_path $DATASET_PATH/$dataset\
                                     --config $config\
                                     --output_path $OUTPUT_PATH\
@@ -64,6 +75,7 @@ run_()
                                     --overlapped_th2 $overlapped_th2\
                                     --downsample_rate $downsample_rate\
                                     --save_results
+
     wait
 }
 
