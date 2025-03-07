@@ -22,8 +22,70 @@ from utils.graphics_utils import BasicPointCloud
 from utils.general_utils import strip_symmetric, build_scaling_rotation
 import matplotlib.pyplot as plt
 
+import copy
+from scipy.spatial.transform import Rotation
+from pytorch3d.transforms import matrix_to_quaternion
+import torch.nn.functional as F
+
 
 class GaussianModel(nn.Module):
+    def import_camera_rt(self,camaera):
+        world2camera = camaera.world_view_transform.T
+        R = world2camera[:3,:3]
+        t = world2camera[:3,3]
+        rotation_obj = Rotation.from_matrix(R.cpu().detach())
+        quaternion = torch.tensor(rotation_obj.as_quat()).cuda()
+        self._camera_quaternion = copy.deepcopy(nn.Parameter(quaternion.requires_grad_(True)))
+        # self._camera_quaternion = nn.Parameter(q.requires_grad_(False))
+        self._camera_t = copy.deepcopy(nn.Parameter(t.requires_grad_(True)))
+        # self._camera_t = nn.Parameter(t.requires_grad_(False))
+
+    def trans_gaussian_camera(self):
+        transformed_gaussians = {}
+        t = self._camera_t
+        q = self._camera_quaternion
+        
+        # t = torch.tensor([0,0,0])
+        # q = torch.tensor([0,0,0,1])
+        
+
+        rel_w2c = torch.eye(4).cuda().float()
+        rel_w2c[:3, :3] = build_rotation(q.unsqueeze(0))
+        rel_w2c[:3, 3] = t
+
+        xyz = self._xyz
+        # xyz_ones = torch.ones(xyz.shape[0], 1).cuda().float()
+        # xyz4 = torch.cat((xyz, xyz_ones), dim=1)
+        transformed_pts = (rel_w2c[:3,:3] @ xyz.T).T + rel_w2c[:3,3]
+        # transformed_pts = (rel_w2c @ xyz4.T).T[:, :3]
+        transformed_gaussians['means3D'] = transformed_pts
+        if True:
+
+            # q_inv = self.quaternion_inverse(q)
+            # norm_rots = F.normalize(self._rotation)
+
+            R_gaussian = build_rotation(self._rotation)
+            R_gaussian_trans = rel_w2c[:3, :3] @ R_gaussian
+            transformed_rots = matrix_to_quaternion(R_gaussian_trans)
+            transformed_rots = torch.cat((transformed_rots[:, 1:4], transformed_rots[:, [0]]), dim=1)
+            # transformed_rots = self.rotation_matrix_to_quaternion(R_gaussian_trans)
+
+            # transformed_rots = self.quat_mult(q,norm_rots)
+
+            # transformed_rots = norm_rots
+            transformed_gaussians['unnorm_rotations'] = transformed_rots
+        else:
+            transformed_gaussians['unnorm_rotations'] = unnorm_rots
+
+        self._xyz_camera = transformed_pts
+        self._rotation_camera = transformed_rots
+            
+        # self._xyz_camera = self._xyz
+        # self._rotation_camera = self._rotation
+
+        return transformed_gaussians
+
+
 
     def build_covariance_from_scaling_rotation(self, scaling, scaling_modifier, rotation):
         L = build_scaling_rotation(scaling_modifier * scaling, rotation)
@@ -51,10 +113,12 @@ class GaussianModel(nn.Module):
         self.active_sh_degree = 0
         self.max_sh_degree = sh_degree  
         self._xyz = torch.empty(0)
+        self._xyz_camera = torch.empty(0)
         self._features_dc = torch.empty(0)
         self._features_rest = torch.empty(0)
         self._scaling = torch.empty(0)
         self._rotation = torch.empty(0)
+        self._rotation_camera = torch.empty(0)
         self._opacity = torch.empty(0)
         self.max_radii2D = torch.empty(0)
         self.xyz_gradient_accum = torch.empty(0)
@@ -109,16 +173,24 @@ class GaussianModel(nn.Module):
     @property
     def get_rotation(self):
         return self.rotation_activation(self._rotation)
+    @property
+    def get_rotation_camera(self):
+        return self.rotation_activation(self._rotation_camera)
     
     @property
     def get_xyz(self):
         return self._xyz
+    @property
+    def get_xyz_camera(self):
+        return self._xyz_camera
     
     @property
     def get_features(self):
         features_dc = self._features_dc
         features_rest = self._features_rest
         return torch.cat((features_dc, features_rest), dim=1)
+    
+
     
     @property
     def get_opacity(self):
@@ -234,6 +306,8 @@ class GaussianModel(nn.Module):
                                                     lr_final=training_args.position_lr_final*self.spatial_lr_scale,
                                                     lr_delay_mult=training_args.position_lr_delay_mult,
                                                     max_steps=training_args.position_lr_max_steps)
+        
+        
     
 
     def training_update(self, training_args):

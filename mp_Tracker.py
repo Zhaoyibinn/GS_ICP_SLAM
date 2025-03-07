@@ -96,6 +96,7 @@ class Tracker(SLAMParameters):
         self.final_pose = slam.final_pose
         self.demo = slam.demo
         self.is_mapping_process_started = slam.is_mapping_process_started
+        self.mapping_ok = slam.mapping_ok
     
     def run(self):
         self.tracking()

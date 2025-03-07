@@ -86,6 +86,7 @@ class GS_ICP_SLAM(SLAMParameters):
         self.shared_target_gaussians = SharedTargetPoints(10000000)
         self.end_of_dataset = torch.zeros((1)).int()
         self.is_tracking_keyframe_shared = torch.zeros((1)).int()
+        self.mapping_ok = torch.zeros((1)).int()
         self.is_mapping_keyframe_shared = torch.zeros((1)).int()
         self.target_gaussians_ready = torch.zeros((1)).int()
         self.new_points_ready = torch.zeros((1)).int()
@@ -107,6 +108,7 @@ class GS_ICP_SLAM(SLAMParameters):
         self.demo.share_memory_()
         self.is_mapping_process_started.share_memory_()
         self.iter_shared.share_memory_()
+        self.mapping_ok.share_memory_()
         
         self.demo[0] = args.demo
         self.mapper = Mapper(self)

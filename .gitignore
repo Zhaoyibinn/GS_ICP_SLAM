@@ -1,3 +1,5 @@
 experiments
 output
 __pycache__
+submodules
+*.pyc

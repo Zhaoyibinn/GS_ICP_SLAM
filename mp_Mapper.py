@@ -106,6 +106,7 @@ class Mapper(SLAMParameters):
         self.final_pose = slam.final_pose
         self.demo = slam.demo
         self.is_mapping_process_started = slam.is_mapping_process_started
+        self.mapping_ok = slam.mapping_ok
     
     def run(self):
         self.mapping()
@@ -156,6 +157,7 @@ class Mapper(SLAMParameters):
         new_keyframe = False
         while True:
             
+
             
             if render_num%1000 == 0:
                 print(render_num)
@@ -231,6 +233,12 @@ class Mapper(SLAMParameters):
                     gt_depth_image = viewpoint_cam.depth_level_2.cuda()
                 
                 self.training=True
+
+                self.gaussians.import_camera_rt(viewpoint_cam)
+                # self.gaussians.training_setup(self)
+                self.gaussians.trans_gaussian_camera()
+                # 每次render的起手
+
                 render_pkg = render_3(viewpoint_cam, self.gaussians, self.pipe, self.background, training_stage=self.training_stage)
                 iter1_num += 1
                 render_num = render_num + 1
