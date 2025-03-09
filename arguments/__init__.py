@@ -147,7 +147,7 @@ class SLAMParameters():
         self.scaling_lr = 0.005 # 0.005 / best : 0.01(32.66)
         self.rotation_lr = 0.001 # 0.001
         self.percent_dense = 0.01 # 0.01
-        self.lambda_dssim = 0.2
+        self.lambda_dssim = 0.2 #0.2
         self.densification_interval = 100 # 100
         self.opacity_reset_interval = 600 # 3000
         self.densify_from_iter = 300    #500

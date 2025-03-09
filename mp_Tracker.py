@@ -56,6 +56,9 @@ class Tracker(SLAMParameters):
         
         self.viewer_fps = slam.viewer_fps
         self.keyframe_freq = slam.keyframe_freq
+
+        self.tracking_keyframe_freq = 5
+
         self.max_correspondence_distance = slam.max_correspondence_distance
         self.reg = pygicp.FastGICP()
         
@@ -277,8 +280,12 @@ class Tracker(SLAMParameters):
                 
                 initial_pose = self.poses[-1]
 
-                current_pose = self.reg.align(initial_pose)
+                # current_pose = self.reg.align(initial_pose)
+                self.reg.align(initial_pose)
+
+                current_pose = initial_pose
                 self.poses.append(current_pose)
+
 
                 if self.rerun_viewer:
                     # rr.set_time_sequence("step", self.iteration_images)
@@ -322,6 +329,13 @@ class Tracker(SLAMParameters):
                 else:
                     if_tracking_keyframe = False
                     self.from_last_tracking_keyframe += 1
+
+
+                if (self.from_last_tracking_keyframe) % self.tracking_keyframe_freq == 0:
+                    if_tracking_keyframe = True
+                    self.from_last_tracking_keyframe = 0
+
+                
                 
                 # Mapping keyframe
                 if (self.from_last_tracking_keyframe) % self.keyframe_freq == 0:
@@ -373,7 +387,7 @@ class Tracker(SLAMParameters):
                         # rr.set_time_sequence("step", self.iteration_images)
                         rr.set_time_seconds("log_time", time.time() - self.total_start_time)
                         rr.log(f"pt/trackable/{self.iteration_images}", rr.Points3D(points, colors=colors, radii=0.01))
-
+                        
                 elif if_mapping_keyframe:
                     
                     while self.is_tracking_keyframe_shared[0] or self.is_mapping_keyframe_shared[0]:

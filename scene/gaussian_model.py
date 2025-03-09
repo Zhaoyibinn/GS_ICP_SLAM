@@ -43,7 +43,7 @@ class GaussianModel(nn.Module):
     def trans_gaussian_camera(self):
         transformed_gaussians = {}
         t = self._camera_t
-        q = self._camera_quaternion
+        q = self.get_quaternion_normalize
         
         # t = torch.tensor([0,0,0])
         # q = torch.tensor([0,0,0,1])
@@ -204,6 +204,11 @@ class GaussianModel(nn.Module):
     def get_opacity(self):
         return self.opacity_activation(self._opacity)
     
+    @property
+    def get_quaternion_normalize(self):
+        return self._camera_quaternion / torch.norm(self._camera_quaternion, dim=-1, keepdim=True)
+
+
     def get_covariance(self, scaling_modifier = 1):
         return self.covariance_activation(self.get_scaling, scaling_modifier, self._rotation)
 
@@ -322,8 +327,8 @@ class GaussianModel(nn.Module):
 
 
         l_camera = [
-            {'params': [self._camera_quaternion], 'lr':  1e-4, "name": "camera_q"},
-            {'params': [self._camera_t], 'lr':  1e-4, "name": "camera_t"},
+            {'params': [self._camera_quaternion], 'lr':  1e-3, "name": "camera_q"},
+            {'params': [self._camera_t], 'lr':  2e-3, "name": "camera_t"},
         ]
 
         self.optimizer_camera = torch.optim.Adam(l_camera, eps=1e-15)

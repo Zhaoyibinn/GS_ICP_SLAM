@@ -20,3 +20,8 @@ new_train_time = 10 / random_train_time = 19 的情况下（先做10位姿估计
 
 鬼知道哪里出问题了
 
+#### branch-test
+测试了很抽象的方法，直接去掉了GICP（只用于初始化高斯，不关注位姿），全靠GS-render回归
+
+mapper给tracker的东西是对的，但是发现如果旋转高斯的时候不把camera_q归一化的话就会有点问题
+
