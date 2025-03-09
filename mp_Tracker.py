@@ -22,6 +22,7 @@ from tqdm import tqdm
 from utils.zyb_extra import save_colmap
 
 import copy
+from copy import deepcopy
 
 
 class Tracker(SLAMParameters):
@@ -100,6 +101,9 @@ class Tracker(SLAMParameters):
         self.demo = slam.demo
         self.is_mapping_process_started = slam.is_mapping_process_started
         self.mapping_ok = slam.mapping_ok
+
+        self.retrack_ok_shared = slam.retrack_ok_shared
+        self.retrack_Rt_shared = slam.retrack_Rt_shared
     
     def run(self):
         self.tracking()
@@ -133,6 +137,7 @@ class Tracker(SLAMParameters):
 
         self.total_start_time = time.time()
         pbar = tqdm(total=self.num_images)
+        last_retrack_Rt_shared = deepcopy(self.retrack_Rt_shared[0])
 
         # self.save_images()
         # self.save_gt_poses_continus_error()
@@ -149,6 +154,42 @@ class Tracker(SLAMParameters):
         ate_list = []
 
         for ii in range(self.num_images):
+
+
+            while self.retrack_ok_shared[0]:
+                
+                time.sleep(1e-15)
+
+            # print("track frame:", ii)
+
+            # last_retrack_Rt_shared = deepcopy(self.retrack_Rt_shared[0])
+            # if last_retrack_Rt_shared.float().mean() != self.retrack_Rt_shared[0].mean() :
+            if last_retrack_Rt_shared.float().mean() != self.retrack_Rt_shared[0].mean() and self.retrack_Rt_shared[0].mean()!=0.25:
+                last_retrack_Rt_shared = deepcopy(self.retrack_Rt_shared[0])
+                pose_retrack = torch.eye(4)
+                pose_retrack[:3,:3] = last_retrack_Rt_shared[:3,:3]
+                pose_retrack[:3,3] = last_retrack_Rt_shared[:3,3]
+
+                # GICP_retrack_R = pose_retrack[:3,:3].T
+                # GICP_retrack_t = pose_retrack[:3,3]
+                # GICP_T = torch.eye(4)
+                # GICP_T[:3,:3] = GICP_retrack_R
+                # GICP_T[:3,3] = GICP_retrack_t
+
+                # GICP_T = torch.inverse(GICP_T)
+                idx = self.poses.__len__() - 1
+
+                # print(f"{idx} GSICP ATE:", (self.trajmanager.gt_poses[idx][:3,3] - self.poses[idx][:3,3]).mean())
+                # print(f"{idx} Ours ATE:",(self.trajmanager.gt_poses[idx][:3,3] -np.array(pose_retrack.inverse()[:3,3])).mean())
+                
+                self.poses[-1]=np.array(pose_retrack.inverse())
+            else:
+                idx = self.poses.__len__() - 1
+
+                # ate = self.evaluate_ate(self.trajmanager.gt_poses[:self.poses.__len__()], self.poses)*100
+                # print(f"{idx} GSICP ATE MEAN:", ate)
+
+
             self.iter_shared[0] = ii
             current_image = self.rgb_images.pop(0)
             depth_image = self.depth_images.pop(0)

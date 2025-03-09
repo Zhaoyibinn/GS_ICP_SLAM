@@ -15,3 +15,8 @@ commit了GSICP原版，增加了一些pose colmap存储
 
 改写了Mapper，可以设置render多少new和多少random
 
+new_train_time = 10 / random_train_time = 19 的情况下（先做10位姿估计，在render19随机）：
+只有17.06 还不如原版
+
+鬼知道哪里出问题了
+

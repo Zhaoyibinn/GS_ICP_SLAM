@@ -35,10 +35,10 @@ class GaussianModel(nn.Module):
         t = world2camera[:3,3]
         rotation_obj = Rotation.from_matrix(R.cpu().detach())
         quaternion = torch.tensor(rotation_obj.as_quat()).cuda()
-        self._camera_quaternion = copy.deepcopy(nn.Parameter(quaternion.requires_grad_(True)))
-        # self._camera_quaternion = nn.Parameter(q.requires_grad_(False))
-        self._camera_t = copy.deepcopy(nn.Parameter(t.requires_grad_(True)))
-        # self._camera_t = nn.Parameter(t.requires_grad_(False))
+        # self._camera_quaternion = copy.deepcopy(nn.Parameter(quaternion.requires_grad_(True)))
+        self._camera_quaternion = nn.Parameter(quaternion.requires_grad_(False))
+        # self._camera_t = copy.deepcopy(nn.Parameter(t.requires_grad_(True)))
+        self._camera_t = nn.Parameter(t.requires_grad_(False))
 
     def trans_gaussian_camera(self):
         transformed_gaussians = {}
@@ -128,9 +128,17 @@ class GaussianModel(nn.Module):
         self.trackable_mask = torch.empty(0)
         
         self.optimizer = None
+        self.optimizer_camera = None
+
         self.percent_dense = 0
         self.spatial_lr_scale = 0
         self.setup_functions()
+
+        self._camera_world_view_transform = torch.empty(0)
+        self._camera_quaternion = torch.zeros(4).cuda()
+        self._camera_t = torch.zeros(3).cuda()
+
+        self.optimizer_noopt_key = ["camera_q","camera_t"]
 
     def capture(self):
         return (
@@ -301,35 +309,50 @@ class GaussianModel(nn.Module):
         ]
 
         self.optimizer = torch.optim.Adam(l, lr=0.0, eps=1e-15)
+
+
         
         self.xyz_scheduler_args = get_expon_lr_func(lr_init=training_args.position_lr_init*self.spatial_lr_scale,
                                                     lr_final=training_args.position_lr_final*self.spatial_lr_scale,
                                                     lr_delay_mult=training_args.position_lr_delay_mult,
                                                     max_steps=training_args.position_lr_max_steps)
+        
+    def training_camera_setup(self):
+
+
+
+        l_camera = [
+            {'params': [self._camera_quaternion], 'lr':  1e-4, "name": "camera_q"},
+            {'params': [self._camera_t], 'lr':  1e-4, "name": "camera_t"},
+        ]
+
+        self.optimizer_camera = torch.optim.Adam(l_camera, eps=1e-15)
+        
+
         
         
     
 
-    def training_update(self, training_args):
-        self.percent_dense = training_args.percent_dense
-        self.xyz_gradient_accum = torch.zeros((self.get_xyz.shape[0], 1), device="cuda")
-        self.denom = torch.zeros((self.get_xyz.shape[0], 1), device="cuda")
+    # def training_update(self, training_args):
+    #     self.percent_dense = training_args.percent_dense
+    #     self.xyz_gradient_accum = torch.zeros((self.get_xyz.shape[0], 1), device="cuda")
+    #     self.denom = torch.zeros((self.get_xyz.shape[0], 1), device="cuda")
 
-        l = [
-            {'params': [self._xyz], 'lr': training_args.position_lr_init * self.spatial_lr_scale, "name": "xyz"},
-            {'params': [self._features_dc], 'lr': training_args.feature_lr, "name": "f_dc"},
-            {'params': [self._features_rest], 'lr': training_args.feature_lr / 20.0, "name": "f_rest"},
-            {'params': [self._opacity], 'lr': training_args.opacity_lr, "name": "opacity"},
-            {'params': [self._scaling], 'lr': training_args.scaling_lr, "name": "scaling"},
-            {'params': [self._rotation], 'lr': training_args.rotation_lr, "name": "rotation"}
-        ]
+    #     l = [
+    #         {'params': [self._xyz], 'lr': training_args.position_lr_init * self.spatial_lr_scale, "name": "xyz"},
+    #         {'params': [self._features_dc], 'lr': training_args.feature_lr, "name": "f_dc"},
+    #         {'params': [self._features_rest], 'lr': training_args.feature_lr / 20.0, "name": "f_rest"},
+    #         {'params': [self._opacity], 'lr': training_args.opacity_lr, "name": "opacity"},
+    #         {'params': [self._scaling], 'lr': training_args.scaling_lr, "name": "scaling"},
+    #         {'params': [self._rotation], 'lr': training_args.rotation_lr, "name": "rotation"}
+    #     ]
 
-        # self.optimizer = torch.optim.Adam(l, lr=0.0, eps=1e-15)
+    #     self.optimizer = torch.optim.Adam(l, lr=0.0, eps=1e-15)
         
-        self.xyz_scheduler_args = get_expon_lr_func(lr_init=training_args.position_lr_init*self.spatial_lr_scale,
-                                                    lr_final=training_args.position_lr_final*self.spatial_lr_scale,
-                                                    lr_delay_mult=training_args.position_lr_delay_mult,
-                                                    max_steps=training_args.position_lr_max_steps)
+    #     self.xyz_scheduler_args = get_expon_lr_func(lr_init=training_args.position_lr_init*self.spatial_lr_scale,
+    #                                                 lr_final=training_args.position_lr_final*self.spatial_lr_scale,
+    #                                                 lr_delay_mult=training_args.position_lr_delay_mult,
+    #                                                 max_steps=training_args.position_lr_max_steps)
 
 
     def update_learning_rate(self, iteration):
@@ -339,6 +362,8 @@ class GaussianModel(nn.Module):
                 lr = self.xyz_scheduler_args(iteration)
                 param_group['lr'] = lr
                 return lr
+            
+
 
     def construct_list_of_attributes(self):
         l = ['x', 'y', 'z', 'nx', 'ny', 'nz']
@@ -468,6 +493,8 @@ class GaussianModel(nn.Module):
     def replace_tensor_to_optimizer(self, tensor, name):
         optimizable_tensors = {}
         for group in self.optimizer.param_groups:
+            if group['name'] in self.optimizer_noopt_key:
+                continue
             if group["name"] == name:
                 stored_state = self.optimizer.state.get(group['params'][0], None)
                 stored_state["exp_avg"] = torch.zeros_like(tensor)
@@ -483,6 +510,8 @@ class GaussianModel(nn.Module):
     def _prune_optimizer(self, mask):
         optimizable_tensors = {}
         for group in self.optimizer.param_groups:
+            if group['name'] in self.optimizer_noopt_key:
+                continue
             stored_state = self.optimizer.state.get(group['params'][0], None)
             if stored_state is not None:
                 stored_state["exp_avg"] = stored_state["exp_avg"][mask]
@@ -524,6 +553,8 @@ class GaussianModel(nn.Module):
     def cat_tensors_to_optimizer(self, tensors_dict):
         optimizable_tensors = {}
         for group in self.optimizer.param_groups:
+            if group['name'] in self.optimizer_noopt_key:
+                continue
             assert len(group["params"]) == 1
             extension_tensor = tensors_dict[group["name"]]
             stored_state = self.optimizer.state.get(group['params'][0], None)

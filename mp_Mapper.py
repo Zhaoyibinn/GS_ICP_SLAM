@@ -20,6 +20,8 @@ from torchmetrics.image.lpip import LearnedPerceptualImagePatchSimilarity
 import open3d as o3d
 import matplotlib.pyplot as plt
 
+from scipy.spatial.transform import Rotation
+
 class Pipe():
     def __init__(self, convert_SHs_python, compute_cov3D_python, debug):
         self.convert_SHs_python = convert_SHs_python
@@ -107,6 +109,9 @@ class Mapper(SLAMParameters):
         self.demo = slam.demo
         self.is_mapping_process_started = slam.is_mapping_process_started
         self.mapping_ok = slam.mapping_ok
+
+        self.retrack_ok_shared = slam.retrack_ok_shared
+        self.retrack_Rt_shared = slam.retrack_Rt_shared
     
     def run(self):
         self.mapping()
@@ -156,6 +161,7 @@ class Mapper(SLAMParameters):
 
         new_keyframe = False
         has_rendered = 0
+        tracking_newframe = False
         while True:
             
 
@@ -181,11 +187,11 @@ class Mapper(SLAMParameters):
                 
                 # Add new gaussians to map gaussians
                 self.gaussians.add_from_pcd2_tensor(points, colors, rots, scales, z_values, trackable_filter)
-
+                if self.shared_cam.cam_idx[0].item() == 0:
                 # Allocate new target points to shared memory
-                target_points, target_rots, target_scales  = self.gaussians.get_trackable_gaussians_tensor(self.trackable_opacity_th)
-                self.shared_target_gaussians.input_values(target_points, target_rots, target_scales)
-                self.target_gaussians_ready[0] = 1
+                    target_points, target_rots, target_scales  = self.gaussians.get_trackable_gaussians_tensor(self.trackable_opacity_th)
+                    self.shared_target_gaussians.input_values(target_points, target_rots, target_scales)
+                    self.target_gaussians_ready[0] = 1
 
                 # Add new keyframe
                 newcam = copy.deepcopy(self.shared_cam)
@@ -196,6 +202,8 @@ class Mapper(SLAMParameters):
                 self.new_keyframes.append(len(self.mapping_cams)-1)
                 self.is_tracking_keyframe_shared[0] = 0
 
+                tracking_newframe = True
+
             elif self.is_mapping_keyframe_shared[0]:
                 has_rendered = 0
                 print("iter1_num: ",iter1_num)
@@ -204,7 +212,7 @@ class Mapper(SLAMParameters):
                 points, colors, rots, scales, z_values, _ = self.shared_new_gaussians.get_values()
                 
                 # Add new gaussians to map gaussians
-                self.gaussians.add_from_pcd2_tensor(points, colors, rots, scales, z_values, [])
+                # self.gaussians.add_from_pcd2_tensor(points, colors, rots, scales, z_values, [])
                 
                 # Add new keyframe
                 newcam = copy.deepcopy(self.shared_cam)
@@ -214,8 +222,8 @@ class Mapper(SLAMParameters):
                 self.new_keyframes.append(len(self.mapping_cams)-1)
                 self.is_mapping_keyframe_shared[0] = 0
 
-            new_train_time = 1
-            random_train_time = 19 
+            new_train_time = 10
+            random_train_time = 19
 
 
             if len(self.new_keyframes) > 0 and has_rendered == 0:
@@ -240,7 +248,7 @@ class Mapper(SLAMParameters):
                 # self.gaussians.training_setup(self)
 
 
-
+                self.gaussians.training_camera_setup()
                 for i in range(new_train_time):
                     self.gaussians.trans_gaussian_camera()
                     # 每次render的起手
@@ -269,17 +277,23 @@ class Mapper(SLAMParameters):
                     loss_rgb = (1.0 - self.lambda_dssim) * Ll1 + self.lambda_dssim * (1.0 - L_ssim)
                     loss_d = Ll1_d
                     
-                    loss = loss_rgb + 0.1*loss_d
+                    # loss = loss_rgb + 0.1*loss_d
+                    loss = loss_rgb
                     
                     loss.backward()
                     with torch.no_grad():
                         if self.train_iter % 200 == 0:  # 200
                             self.gaussians.prune_large_and_transparent(0.005, self.prune_th)
                         
-                        self.gaussians.optimizer.step()
-                        self.gaussians.optimizer.zero_grad(set_to_none = True)
+                        # self.gaussians.optimizer.step()
+                        # self.gaussians.optimizer.zero_grad(set_to_none = True)
+
+                        self.gaussians.optimizer_camera.step()
+                        self.gaussians.optimizer_camera.zero_grad(set_to_none = True)
                         
-                        if new_keyframe and self.rerun_viewer:
+                        
+                        # if new_keyframe and self.rerun_viewer:
+                        if self.rerun_viewer:
                             current_i = copy.deepcopy(self.iter_shared[0])
                             rgb_np = image.cpu().numpy().transpose(1,2,0)
                             rgb_np = np.clip(rgb_np, 0., 1.0) * 255
@@ -290,6 +304,58 @@ class Mapper(SLAMParameters):
                          
                     
                     self.train_iter += 1
+
+
+                # Add new gaussians to map gaussians
+                if tracking_newframe or self.shared_cam.cam_idx[0].item() == 0:
+                    q_retrack = self.gaussians._camera_quaternion
+                    t_retrack = self.gaussians._camera_t
+
+                    world2camera = viewpoint_cam.world_view_transform.T
+                    R = world2camera[:3,:3]
+                    t = world2camera[:3,3]
+                    rotation_obj = Rotation.from_matrix(R.cpu().detach())
+                    quaternion = torch.tensor(rotation_obj.as_quat()).cuda()
+
+                    R_retrack = torch.tensor(Rotation.from_quat(q_retrack.cpu().detach()).as_matrix()).cuda()
+                    R_GCIP = torch.tensor(Rotation.from_quat(quaternion.cpu().detach()).as_matrix()).cuda()
+
+                    T_retrack = torch.eye(4).cuda()
+                    T_GCIP = torch.eye(4).cuda()
+
+                    T_GCIP[:3,:3] = R_GCIP
+                    T_GCIP[:3,3] = t
+
+                    T_retrack[:3,:3] = R_retrack
+                    T_retrack[:3,3] = t_retrack
+
+
+                    points_zero_base = torch.matmul(R_GCIP.T, points.T.to(torch.float64)).T+t
+                    points_retrack = (torch.matmul(R_retrack, points_zero_base.T).T - torch.matmul(R_retrack, t_retrack.to(torch.float64))).to(torch.float32)
+
+                    rot_GICP = torch.tensor(Rotation.from_quat(rots[:, [3, 0, 1, 2]].cpu().detach()).as_matrix()).cuda()
+                    rot_zero_base = torch.matmul(R_GCIP.T, rot_GICP.T).T
+                    rot_retrack = (torch.matmul(R_retrack, rot_zero_base.T).T).to(torch.float32)
+
+                    rots_q_retrack = torch.tensor(Rotation.from_matrix(rot_retrack.cpu().detach()).as_quat()).cuda().to(torch.float32)[:,[1,2,3,0]]
+                    
+                    self.gaussians.add_from_pcd2_tensor(points_retrack, colors, rots_q_retrack, scales, z_values, trackable_filter)
+
+                    
+
+                    if self.shared_cam.cam_idx[0].item() == 0:
+                        # world2camera_retrack = copy.deepcopy(T_GCIP.cpu().detach())
+                        self.retrack_Rt_shared[0] =  torch.eye(4).float()
+                        self.retrack_ok_shared[0] = 0
+                    else:
+                        target_points, target_rots, target_scales  = self.gaussians.get_trackable_gaussians_tensor(self.trackable_opacity_th)
+                        self.shared_target_gaussians.input_values(target_points, target_rots, target_scales)
+                        self.target_gaussians_ready[0] = 1
+                        if len(self.mapping_cams) != 0 :
+                            world2camera_retrack = copy.deepcopy(T_retrack.cpu().detach())
+                            # world2camera_retrack = copy.deepcopy(T_GCIP.cpu().detach())
+                            self.retrack_Rt_shared[0] =  world2camera_retrack
+                            self.retrack_ok_shared[0] = 0
 
                 for i in range(random_train_time):
                     train_idx = random.choice(range(len(self.mapping_cams)))
@@ -342,7 +408,9 @@ class Mapper(SLAMParameters):
 
                     self.train_iter += 1
                 self.training = False   
-                has_rendered = 1     
+                has_rendered = 1   
+
+                tracking_newframe = False  
                 # torch.cuda.empty_cache()
             
             
