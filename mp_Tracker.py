@@ -179,8 +179,8 @@ class Tracker(SLAMParameters):
                 # GICP_T = torch.inverse(GICP_T)
                 idx = self.poses.__len__() - 1
 
-                # print(f"{idx} GSICP ATE:", (self.trajmanager.gt_poses[idx][:3,3] - self.poses[idx][:3,3]).mean())
-                # print(f"{idx} Ours ATE:",(self.trajmanager.gt_poses[idx][:3,3] -np.array(pose_retrack.inverse()[:3,3])).mean())
+                print(f"{idx} GSICP ATE:", (self.trajmanager.gt_poses[idx][:3,3] - self.poses[idx][:3,3]).mean())
+                print(f"{idx} Ours ATE:",(self.trajmanager.gt_poses[idx][:3,3] -np.array(pose_retrack.inverse()[:3,3])).mean())
                 
                 self.poses[-1]=np.array(pose_retrack.inverse())
             else:

@@ -180,15 +180,16 @@ class Mapper(SLAMParameters):
             
             if self.is_tracking_keyframe_shared[0]:
                 has_rendered = 0
-                print("iter1_num: ",iter1_num)
+                print("Tracking, last iter1_num: ",iter1_num)
                 iter1_num = 0
                 # get shared gaussians
                 points, colors, rots, scales, z_values, trackable_filter = self.shared_new_gaussians.get_values()
                 
                 # Add new gaussians to map gaussians
-                self.gaussians.add_from_pcd2_tensor(points, colors, rots, scales, z_values, trackable_filter)
+                
                 if self.shared_cam.cam_idx[0].item() == 0:
                 # Allocate new target points to shared memory
+                    self.gaussians.add_from_pcd2_tensor(points, colors, rots, scales, z_values, trackable_filter)
                     target_points, target_rots, target_scales  = self.gaussians.get_trackable_gaussians_tensor(self.trackable_opacity_th)
                     self.shared_target_gaussians.input_values(target_points, target_rots, target_scales)
                     self.target_gaussians_ready[0] = 1
@@ -206,13 +207,13 @@ class Mapper(SLAMParameters):
 
             elif self.is_mapping_keyframe_shared[0]:
                 has_rendered = 0
-                print("iter1_num: ",iter1_num)
+                print("Mapping, last iter1_num: ",iter1_num)
                 iter1_num = 0
                 # get shared gaussians
                 points, colors, rots, scales, z_values, _ = self.shared_new_gaussians.get_values()
                 
                 # Add new gaussians to map gaussians
-                # self.gaussians.add_from_pcd2_tensor(points, colors, rots, scales, z_values, [])
+                self.gaussians.add_from_pcd2_tensor(points, colors, rots, scales, z_values, [])
                 
                 # Add new keyframe
                 newcam = copy.deepcopy(self.shared_cam)
@@ -272,6 +273,7 @@ class Mapper(SLAMParameters):
                     L_ssim_map, L_ssim = ssim(image, gt_image)
 
                     d_max = 10.
+
                     Ll1_d_map, Ll1_d = l1_loss(depth_image/d_max, gt_depth_image/d_max)
 
                     loss_rgb = (1.0 - self.lambda_dssim) * Ll1 + self.lambda_dssim * (1.0 - L_ssim)
@@ -279,35 +281,67 @@ class Mapper(SLAMParameters):
                     
                     # loss = loss_rgb + 0.1*loss_d
                     loss = loss_rgb
-                    
+                    # loss = loss_d
+                    # loss = (1.0 - 0.6) * Ll1 + 0.6 * (1.0 - L_ssim)
+
                     loss.backward()
                     with torch.no_grad():
                         if self.train_iter % 200 == 0:  # 200
                             self.gaussians.prune_large_and_transparent(0.005, self.prune_th)
                         
-                        # self.gaussians.optimizer.step()
-                        # self.gaussians.optimizer.zero_grad(set_to_none = True)
+                        if i >= new_train_time - 1 or train_idx==0:
+                            self.gaussians.optimizer.step()
+                        self.gaussians.optimizer.zero_grad(set_to_none = True)
 
-                        self.gaussians.optimizer_camera.step()
+                        if train_idx!=0:
+                            self.gaussians.optimizer_camera.step()
                         self.gaussians.optimizer_camera.zero_grad(set_to_none = True)
                         
+                        # self.gaussians.optimizer.step()
                         
                         # if new_keyframe and self.rerun_viewer:
-                        if self.rerun_viewer:
+                        if self.rerun_viewer and i % 3 == 0:
                             current_i = copy.deepcopy(self.iter_shared[0])
+
                             rgb_np = image.cpu().numpy().transpose(1,2,0)
                             rgb_np = np.clip(rgb_np, 0., 1.0) * 255
+
+                            rgb_gt_np = gt_image.cpu().numpy().transpose(1,2,0)
+                            rgb_gt_np = np.clip(rgb_gt_np, 0., 1.0) * 255
+
+                            Ll1_map_np = Ll1_map.cpu().numpy().transpose(1,2,0)
+                            Ll1_map_np = np.clip(Ll1_map_np, 0., 1.0) * 255
+
+                            depth_np = (depth_image/d_max).cpu().numpy().transpose(1,2,0)
+                            depth_np = np.clip(depth_np, 0., 1.0) * 255
+
+                            depth_gt_np = (gt_depth_image/d_max).cpu().numpy().transpose(1,2,0)
+                            depth_gt_np = np.clip(depth_gt_np, 0., 1.0) * 255
+
+                            Ll1_d_map_np = Ll1_d_map.cpu().numpy().transpose(1,2,0)
+                            Ll1_d_map_np = np.clip(Ll1_d_map_np, 0., 1.0) * 255
+
+                            
+
+
+
+
                             # rr.set_time_sequence("step", current_i)
                             rr.set_time_seconds("log_time", time.time() - self.total_start_time_viewer)
                             rr.log("rendered_rgb", rr.Image(rgb_np))
-                            new_keyframe = False
+                            rr.log("gt_rgb", rr.Image(rgb_gt_np))
+                            rr.log("Ll1_map", rr.Image(Ll1_map_np))
+
+                            # rr.log("rendered_depth", rr.Image(depth_np))
+                            # rr.log("gt_depth", rr.Image(depth_gt_np))
+                            # rr.log("Ll1_d_map", rr.Image(Ll1_d_map_np))
                          
                     
                     self.train_iter += 1
 
 
                 # Add new gaussians to map gaussians
-                if tracking_newframe or self.shared_cam.cam_idx[0].item() == 0:
+                if train_idx!=0 and tracking_newframe:
                     q_retrack = self.gaussians._camera_quaternion
                     t_retrack = self.gaussians._camera_t
 

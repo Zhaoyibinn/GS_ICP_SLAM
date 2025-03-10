@@ -20,3 +20,13 @@ new_train_time = 10 / random_train_time = 19 的情况下（先做10位姿估计
 
 鬼知道哪里出问题了
 
+### 20250310
+
+6b5a6466中检查发现问题，在mapping keyframe的时候高斯没有加入
+
+改写后解决该问题，在1/19的情况下取消camera的优化器可以达到17.5
+
+new_train_time = 10 / random_train_time = 19 的情况下（先做10位姿估计，在render19随机）：可以达到17.5，还是基本没有什么变化
+
+需要注意跳转gaussian_model.py里面的位姿优化lr，不然可能会爆炸
+
