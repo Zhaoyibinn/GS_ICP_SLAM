@@ -251,7 +251,7 @@ class Mapper(SLAMParameters):
 
                 self.gaussians.training_camera_setup()
                 for i in range(new_train_time):
-                    self.gaussians.trans_gaussian_camera()
+                    self.gaussians.trans_gaussian_camera(viewpoint_cam)
                     # 每次render的起手
 
 
@@ -343,8 +343,8 @@ class Mapper(SLAMParameters):
                 # Add new gaussians to map gaussians
                 # if train_idx!=0 and tracking_newframe:
                 if train_idx!=0:
-                    q_retrack = self.gaussians._camera_quaternion
-                    t_retrack = self.gaussians._camera_t
+                    q_retrack = self.gaussians._camera_quaternion[viewpoint_cam.cam_idx[0]]
+                    t_retrack = self.gaussians._camera_t[viewpoint_cam.cam_idx[0]]
 
                     world2camera = viewpoint_cam.world_view_transform.T
                     R = world2camera[:3,:3]
@@ -416,7 +416,7 @@ class Mapper(SLAMParameters):
                         gt_depth_image = viewpoint_cam.depth_level_2.cuda()
 
                     self.gaussians.import_camera_rt(viewpoint_cam)
-                    self.gaussians.trans_gaussian_camera()
+                    self.gaussians.trans_gaussian_camera(viewpoint_cam)
 
                     render_pkg = render_3(viewpoint_cam, self.gaussians, self.pipe, self.background, training_stage=self.training_stage)
                     iter1_num += 1

@@ -30,20 +30,24 @@ import torch.nn.functional as F
 
 class GaussianModel(nn.Module):
     def import_camera_rt(self,camaera):
+
+        camera_idx = camaera.cam_idx[0].item()
         world2camera = camaera.world_view_transform.T
         R = world2camera[:3,:3]
         t = world2camera[:3,3]
         rotation_obj = Rotation.from_matrix(R.cpu().detach())
         quaternion = torch.tensor(rotation_obj.as_quat()).cuda()
         # self._camera_quaternion = copy.deepcopy(nn.Parameter(quaternion.requires_grad_(True)))
-        self._camera_quaternion = nn.Parameter(quaternion.requires_grad_(False))
-        # self._camera_t = copy.deepcopy(nn.Parameter(t.requires_grad_(True)))
-        self._camera_t = nn.Parameter(t.requires_grad_(False))
+        with torch.no_grad():
+            self._camera_quaternion[camera_idx] = quaternion
+            # self._camera_t = copy.deepcopy(nn.Parameter(t.requires_grad_(True)))
+            self._camera_t[camera_idx] = t
 
-    def trans_gaussian_camera(self):
+    def trans_gaussian_camera(self,camaera):
         transformed_gaussians = {}
-        t = self._camera_t
-        q = self.get_quaternion_normalize
+        camera_idx = camaera.cam_idx[0].item()
+        t = self._camera_t[camera_idx]
+        q = self.get_quaternion_normalize(camera_idx)
         # q = self._camera_quaternion
         
         # t = torch.tensor([0,0,0])
@@ -111,6 +115,7 @@ class GaussianModel(nn.Module):
     def __init__(self, sh_degree : int):
         super().__init__()
         
+        self.max_img_num = 5000
         self.active_sh_degree = 0
         self.max_sh_degree = sh_degree  
         self._xyz = torch.empty(0)
@@ -136,8 +141,9 @@ class GaussianModel(nn.Module):
         self.setup_functions()
 
         self._camera_world_view_transform = torch.empty(0)
-        self._camera_quaternion = torch.zeros(4).cuda()
-        self._camera_t = torch.zeros(3).cuda()
+        self._camera_quaternion = nn.Parameter(torch.zeros(4).cuda().repeat(self.max_img_num,1).requires_grad_(False))
+        self._camera_t = nn.Parameter(torch.zeros(3).cuda().repeat(self.max_img_num,1).requires_grad_(False))
+        
 
         self.optimizer_noopt_key = ["camera_q","camera_t"]
 
@@ -205,9 +211,10 @@ class GaussianModel(nn.Module):
     def get_opacity(self):
         return self.opacity_activation(self._opacity)
     
-    @property
-    def get_quaternion_normalize(self):
-        return self._camera_quaternion / torch.norm(self._camera_quaternion, dim=-1, keepdim=True)
+    # @property
+    def get_quaternion_normalize(self,camera_idx):
+        selected = self._camera_quaternion[camera_idx]
+        return selected / torch.norm(selected, dim=-1, keepdim=True)
 
     
     def get_covariance(self, scaling_modifier = 1):

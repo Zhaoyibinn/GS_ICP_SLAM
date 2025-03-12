@@ -31,3 +31,6 @@ new_train_time = 10 / random_train_time = 19 的情况下（先做10位姿估计
 需要注意跳转gaussian_model.py里面的位姿优化lr，不然可能会爆炸
 
 给mapping keyframe也增加了位姿优化（只作用于高斯不更新位姿）（似乎更新位姿了会出问题，但是加不加应该问题不大，因为其实不是顺序帧的）
+
+### 20250312
+修改了camera_q/t的编写方式，现在每一个新视角都会有一个独特的q/t并保持优化，PSNR不变
