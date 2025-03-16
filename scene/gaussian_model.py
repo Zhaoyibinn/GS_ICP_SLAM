@@ -39,9 +39,10 @@ class GaussianModel(nn.Module):
         quaternion = torch.tensor(rotation_obj.as_quat()).cuda()
         # self._camera_quaternion = copy.deepcopy(nn.Parameter(quaternion.requires_grad_(True)))
         with torch.no_grad():
-            self._camera_quaternion[camera_idx] = quaternion
-            # self._camera_t = copy.deepcopy(nn.Parameter(t.requires_grad_(True)))
-            self._camera_t[camera_idx] = t
+            if self._camera_quaternion[camera_idx].mean().item() ==0:
+                self._camera_quaternion[camera_idx] = quaternion
+                # self._camera_t = copy.deepcopy(nn.Parameter(t.requires_grad_(True)))
+                self._camera_t[camera_idx] = t
 
     def trans_gaussian_camera(self,camaera):
         transformed_gaussians = {}

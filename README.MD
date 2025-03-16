@@ -34,3 +34,20 @@ new_train_time = 10 / random_train_time = 19 的情况下（先做10位姿估计
 
 ### 20250312
 修改了camera_q/t的编写方式，现在每一个新视角都会有一个独特的q/t并保持优化，PSNR不变
+
+### 20250316
+统计了时间，原版的
+
+render time: 0.000538 | loss cal time: 0.005996 | loss back time: 0.006944
+
+***
+
+我们的
+
+trans_gaussian_time: 0.001770
+
+render_time: 0.000487 | loss cal time: 0.003126 | loss back time: 0.030524
+
+由于多了一些pytorch的backward，会导致速度大大降低
+
+在增加了optimizer_camera之后测试了多轮训练，结果没有提升，与第二篇文章的结果不符，应该是有错误

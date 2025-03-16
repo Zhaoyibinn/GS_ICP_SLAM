@@ -22,6 +22,8 @@ import matplotlib.pyplot as plt
 
 from scipy.spatial.transform import Rotation
 
+import time
+
 class Pipe():
     def __init__(self, convert_SHs_python, compute_cov3D_python, debug):
         self.convert_SHs_python = convert_SHs_python
@@ -162,25 +164,28 @@ class Mapper(SLAMParameters):
         new_keyframe = False
         has_rendered = 0
         tracking_newframe = False
+
+        last_record = 0
         while True:
             
 
             
-            if render_num%1000 == 0:
-                print(render_num)
+            if self.train_iter - last_record > 1000:
+                print("train_iter: ",self.train_iter)
+                last_record = self.train_iter
             
-            # if self.end_of_dataset[0] and render_num>29999:
-                # break
-
-            if self.end_of_dataset[0]:
+            if self.end_of_dataset[0] and self.train_iter>9999:
                 break
+
+            # if self.end_of_dataset[0]:
+            #     break
             
             if self.verbose:
                 self.run_viewer()       
             
             if self.is_tracking_keyframe_shared[0]:
                 has_rendered = 0
-                print("Tracking, last iter1_num: ",iter1_num)
+                # print("Tracking, last iter1_num: ",iter1_num)
                 iter1_num = 0
                 # get shared gaussians
                 points, colors, rots, scales, z_values, trackable_filter = self.shared_new_gaussians.get_values()
@@ -207,7 +212,7 @@ class Mapper(SLAMParameters):
 
             elif self.is_mapping_keyframe_shared[0]:
                 has_rendered = 0
-                print("Mapping, last iter1_num: ",iter1_num)
+                # print("Mapping, last iter1_num: ",iter1_num)
                 iter1_num = 0
                 # get shared gaussians
                 points, colors, rots, scales, z_values, _ = self.shared_new_gaussians.get_values()
@@ -223,7 +228,7 @@ class Mapper(SLAMParameters):
                 self.new_keyframes.append(len(self.mapping_cams)-1)
                 self.is_mapping_keyframe_shared[0] = 0
 
-            new_train_time = 10
+            new_train_time = 1
             random_train_time = 19
 
 
@@ -251,12 +256,16 @@ class Mapper(SLAMParameters):
 
                 self.gaussians.training_camera_setup()
                 for i in range(new_train_time):
+                    start = time.time()
                     self.gaussians.trans_gaussian_camera(viewpoint_cam)
                     # 每次render的起手
+                    # print("trans_gaussian_time:",time.time() - start)
 
-
-
+                    start = time.time()
                     render_pkg = render_3(viewpoint_cam, self.gaussians, self.pipe, self.background, training_stage=self.training_stage)
+                    # print("render_time:",time.time() - start)
+
+                    start = time.time()
                     iter1_num += 1
                     render_num = render_num + 1
                     depth_image = render_pkg["render_depth"]
@@ -283,8 +292,14 @@ class Mapper(SLAMParameters):
                     loss = loss_rgb
                     # loss = loss_d
                     # loss = (1.0 - 0.6) * Ll1 + 0.6 * (1.0 - L_ssim)
+                    # print("loss cal time:",time.time()-start)
 
+                    start = time.time()
                     loss.backward()
+
+                    # print("loss bakc time:",time.time()-start)
+
+                    start = time.time()
                     with torch.no_grad():
                         if self.train_iter % 200 == 0:  # 200
                             self.gaussians.prune_large_and_transparent(0.005, self.prune_th)
@@ -293,9 +308,9 @@ class Mapper(SLAMParameters):
                             self.gaussians.optimizer.step()
                         self.gaussians.optimizer.zero_grad(set_to_none = True)
 
-                        if train_idx!=0:
-                            self.gaussians.optimizer_camera.step()
-                        self.gaussians.optimizer_camera.zero_grad(set_to_none = True)
+                        # if train_idx!=0:
+                        #     self.gaussians.optimizer_camera.step()
+                        # self.gaussians.optimizer_camera.zero_grad(set_to_none = True)
                         
                         # self.gaussians.optimizer.step()
                         
@@ -336,7 +351,7 @@ class Mapper(SLAMParameters):
                             # rr.log("gt_depth", rr.Image(depth_gt_np))
                             # rr.log("Ll1_d_map", rr.Image(Ll1_d_map_np))
                          
-                    
+                    # print("other time:",time.time()-start)
                     self.train_iter += 1
 
 
@@ -402,6 +417,7 @@ class Mapper(SLAMParameters):
                     #         self.retrack_ok_shared[0] = 0
 
 
+            if has_rendered == 0 or self.end_of_dataset[0]:
                 for i in range(random_train_time):
                     train_idx = random.choice(range(len(self.mapping_cams)))
                     viewpoint_cam = copy.deepcopy(self.mapping_cams[train_idx])
@@ -450,6 +466,9 @@ class Mapper(SLAMParameters):
                         
                         self.gaussians.optimizer.step()
                         self.gaussians.optimizer.zero_grad(set_to_none = True)
+
+                        self.gaussians.optimizer_camera.step()
+                        self.gaussians.optimizer_camera.zero_grad(set_to_none = True)
 
                     self.train_iter += 1
                 self.training = False   
@@ -576,14 +595,25 @@ class Mapper(SLAMParameters):
                 cam.R = torch.tensor(R)
                 cam.t = torch.tensor(T)
                 if original_resolution:
-                    cam.image_width = gt_rgb_.shape[2]
-                    cam.image_height = gt_rgb_.shape[1]
+                    cam.image_width = [gt_rgb_.shape[2]]
+                    cam.image_height = [gt_rgb_.shape[1]]
+
+                    # cam.image_width = gt_rgb_.shape[2]
+                    # cam.image_height = gt_rgb_.shape[1]
+
                 else:
                     pass
                 
                 cam.update_matrix()
                 # rendered rgb
-                ours_pag = render(cam, self.gaussians, self.pipe, self.background)
+                # ours_pag = render(cam, self.gaussians, self.pipe, self.background)
+
+                cam.cam_idx[0] = torch.tensor(i).to(torch.int32)
+                self.gaussians.import_camera_rt(cam)
+                self.gaussians.trans_gaussian_camera(cam)
+                ours_pag = render_3(cam, self.gaussians, self.pipe, self.background, training_stage=self.training_stage)
+
+
                 ours_rgb_ = ours_pag["render"]
                 ours_depth_ = ours_pag["render_depth"]
 
