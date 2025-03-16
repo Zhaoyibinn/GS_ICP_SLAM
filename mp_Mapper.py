@@ -166,6 +166,8 @@ class Mapper(SLAMParameters):
         tracking_newframe = False
 
         last_record = 0
+
+        self.gaussians.training_camera_setup()
         while True:
             
 
@@ -255,7 +257,7 @@ class Mapper(SLAMParameters):
                 # self.gaussians.training_setup(self)
 
 
-                self.gaussians.training_camera_setup()
+                
                 for i in range(new_train_time):
                     start = time.time()
                     # self.gaussians.trans_gaussian_camera(viewpoint_cam)
@@ -472,8 +474,8 @@ class Mapper(SLAMParameters):
                         self.gaussians.optimizer.step()
                         self.gaussians.optimizer.zero_grad(set_to_none = True)
 
-                        self.gaussians.optimizer_camera.step()
-                        self.gaussians.optimizer_camera.zero_grad(set_to_none = True)
+                        # self.gaussians.optimizer_camera.step()
+                        # self.gaussians.optimizer_camera.zero_grad(set_to_none = True)
 
                     self.train_iter += 1
                 self.training = False   
@@ -561,6 +563,7 @@ class Mapper(SLAMParameters):
         ssims = []
         lpips = []
         
+        mapping_camera_idx = [cam.cam_idx.item() for cam in self.mapping_cams]
         cal_lpips = LearnedPerceptualImagePatchSimilarity(net_type='alex', normalize=True).to("cuda")
         original_resolution = True
         image_names, depth_image_names = self.get_image_dirs(self.dataset_path)
@@ -573,6 +576,10 @@ class Mapper(SLAMParameters):
             os.makedirs(f"{self.output_path}/rendered/depth")  # 如果不存在，创建文件夹
         with torch.no_grad():
             for i in tqdm(range(len(image_names))):
+
+                if i not in mapping_camera_idx:
+                    continue
+
                 gt_depth_ = []
                 cam = self.mapping_cams[0]
                 c2w = final_poses[i]

@@ -116,8 +116,8 @@ class GaussianModel(nn.Module):
         # 每个视角的位姿都可以被优化了
         # extra_tran = self.cal_extra_trans(idx)
         extra_tran = self.extra_trans[idx]
-        # R = extra_tran[:3,:3]
-        R = torch.eye(3).cuda()
+        R = extra_tran[:3,:3]
+        # R = torch.eye(3).cuda()
 
         # t = torch.zeros_like(extra_tran[:3,3])
         # t[0] = extra_tran[:3,3][0]
@@ -130,8 +130,8 @@ class GaussianModel(nn.Module):
     def get_extratrans_rotation(self,idx):
         extra_tran = self.extra_trans[idx]
         # extra_tran = self.cal_extra_trans(idx)
-        # R = extra_tran[:3,:3]
-        R = torch.eye(3).cuda()
+        R = extra_tran[:3,:3]
+        # R = torch.eye(3).cuda()
 
         # t = torch.zeros_like(extra_tran[:3,3])
         # t[0] = extra_tran[:3,3][0]
@@ -372,8 +372,8 @@ class GaussianModel(nn.Module):
     def training_camera_setup(self):
 
         l_camera = [
-            {'params': [self._camera_quaternion], 'lr':  1e-4, "name": "camera_q"},
-            {'params': [self._camera_t], 'lr':  1e-4, "name": "camera_t"},
+            {'params': [self.extra_trans], 'lr':  1e-4, "name": "camera_q"},
+            # {'params': [self.extra_repr], 'lr':  1e-4, "name": "camera_t"},
         ]
 
         self.optimizer_camera = torch.optim.Adam(l_camera, eps=1e-15)
