@@ -250,8 +250,10 @@ class Mapper(SLAMParameters):
                         gt_depth_image = viewpoint_cam.depth_level_2.cuda()
                     
                     self.training=True
+                    start = time.time()
                     render_pkg = render_3(viewpoint_cam, self.gaussians, self.pipe, self.background, training_stage=self.training_stage)
-
+                    print("render time:",time.time()-start)
+                    start = time.time()
                     iter1_num += 1
                     render_num = render_num + 1
                     depth_image = render_pkg["render_depth"]
@@ -274,8 +276,10 @@ class Mapper(SLAMParameters):
                     loss_d = Ll1_d
                     
                     loss = loss_rgb + 0.1*loss_d
-                    
+                    print("loss cal time:",time.time()-start)
+                    start = time.time()
                     loss.backward()
+                    print("loss back time:",time.time()-start)
                     with torch.no_grad():
                         if self.train_iter % 200 == 0:  # 200
                             self.gaussians.prune_large_and_transparent(0.005, self.prune_th)
