@@ -174,11 +174,11 @@ class Mapper(SLAMParameters):
                 print("train_iter: ",self.train_iter)
                 last_record = self.train_iter
             
-            if self.end_of_dataset[0] and self.train_iter>9999:
-                break
-
-            # if self.end_of_dataset[0]:
+            # if self.end_of_dataset[0] and self.train_iter>9999:
             #     break
+
+            if self.end_of_dataset[0]:
+                break
             
             if self.verbose:
                 self.run_viewer()       
@@ -192,7 +192,8 @@ class Mapper(SLAMParameters):
                 
                 # Add new gaussians to map gaussians
                 
-                if self.shared_cam.cam_idx[0].item() == 0:
+                # if self.shared_cam.cam_idx[0].item() == 0:
+                if True:
                 # Allocate new target points to shared memory
                     self.gaussians.add_from_pcd2_tensor(points, colors, rots, scales, z_values, trackable_filter)
                     target_points, target_rots, target_scales  = self.gaussians.get_trackable_gaussians_tensor(self.trackable_opacity_th)
@@ -218,7 +219,7 @@ class Mapper(SLAMParameters):
                 points, colors, rots, scales, z_values, _ = self.shared_new_gaussians.get_values()
                 
                 # Add new gaussians to map gaussians
-                # self.gaussians.add_from_pcd2_tensor(points, colors, rots, scales, z_values, [])
+                self.gaussians.add_from_pcd2_tensor(points, colors, rots, scales, z_values, [])
                 
                 # Add new keyframe
                 newcam = copy.deepcopy(self.shared_cam)
@@ -250,14 +251,14 @@ class Mapper(SLAMParameters):
                     
                 self.training=True
 
-                self.gaussians.import_camera_rt(viewpoint_cam)
+                # self.gaussians.import_camera_rt(viewpoint_cam)
                 # self.gaussians.training_setup(self)
 
 
                 self.gaussians.training_camera_setup()
                 for i in range(new_train_time):
                     start = time.time()
-                    self.gaussians.trans_gaussian_camera(viewpoint_cam)
+                    # self.gaussians.trans_gaussian_camera(viewpoint_cam)
                     # 每次render的起手
                     # print("trans_gaussian_time:",time.time() - start)
 
@@ -358,57 +359,61 @@ class Mapper(SLAMParameters):
                 # Add new gaussians to map gaussians
                 # if train_idx!=0 and tracking_newframe:
                 if train_idx!=0:
-                    q_retrack = self.gaussians._camera_quaternion[viewpoint_cam.cam_idx[0]]
-                    t_retrack = self.gaussians._camera_t[viewpoint_cam.cam_idx[0]]
+                    # q_retrack = self.gaussians._camera_quaternion[viewpoint_cam.cam_idx[0]]
+                    # t_retrack = self.gaussians._camera_t[viewpoint_cam.cam_idx[0]]
 
-                    world2camera = viewpoint_cam.world_view_transform.T
-                    R = world2camera[:3,:3]
-                    t = world2camera[:3,3]
-                    rotation_obj = Rotation.from_matrix(R.cpu().detach())
-                    quaternion = torch.tensor(rotation_obj.as_quat()).cuda()
+                    # world2camera = viewpoint_cam.world_view_transform.T
+                    # R = world2camera[:3,:3]
+                    # t = world2camera[:3,3]
+                    # rotation_obj = Rotation.from_matrix(R.cpu().detach())
+                    # quaternion = torch.tensor(rotation_obj.as_quat()).cuda()
 
-                    R_retrack = torch.tensor(Rotation.from_quat(q_retrack.cpu().detach()).as_matrix()).cuda()
-                    R_GCIP = torch.tensor(Rotation.from_quat(quaternion.cpu().detach()).as_matrix()).cuda()
+                    # R_retrack = torch.tensor(Rotation.from_quat(q_retrack.cpu().detach()).as_matrix()).cuda()
+                    # R_GCIP = torch.tensor(Rotation.from_quat(quaternion.cpu().detach()).as_matrix()).cuda()
 
-                    T_retrack = torch.eye(4).cuda()
-                    T_GCIP = torch.eye(4).cuda()
+                    # T_retrack = torch.eye(4).cuda()
+                    # T_GCIP = torch.eye(4).cuda()
 
-                    T_GCIP[:3,:3] = R_GCIP
-                    T_GCIP[:3,3] = t
+                    # T_GCIP[:3,:3] = R_GCIP
+                    # T_GCIP[:3,3] = t
 
-                    T_retrack[:3,:3] = R_retrack
-                    T_retrack[:3,3] = t_retrack
+                    # T_retrack[:3,:3] = R_retrack
+                    # T_retrack[:3,3] = t_retrack
 
 
-                    points_zero_base = torch.matmul(R_GCIP.T, points.T.to(torch.float64)).T+t
-                    points_retrack = (torch.matmul(R_retrack, points_zero_base.T).T - torch.matmul(R_retrack, t_retrack.to(torch.float64))).to(torch.float32)
+                    # points_zero_base = torch.matmul(R_GCIP.T, points.T.to(torch.float64)).T+t
+                    # points_retrack = (torch.matmul(R_retrack, points_zero_base.T).T - torch.matmul(R_retrack, t_retrack.to(torch.float64))).to(torch.float32)
 
-                    rot_GICP = torch.tensor(Rotation.from_quat(rots[:, [3, 0, 1, 2]].cpu().detach()).as_matrix()).cuda()
-                    rot_zero_base = torch.matmul(R_GCIP.T, rot_GICP.T).T
-                    rot_retrack = (torch.matmul(R_retrack, rot_zero_base.T).T).to(torch.float32)
+                    # rot_GICP = torch.tensor(Rotation.from_quat(rots[:, [3, 0, 1, 2]].cpu().detach()).as_matrix()).cuda()
+                    # rot_zero_base = torch.matmul(R_GCIP.T, rot_GICP.T).T
+                    # rot_retrack = (torch.matmul(R_retrack, rot_zero_base.T).T).to(torch.float32)
 
-                    rots_q_retrack = torch.tensor(Rotation.from_matrix(rot_retrack.cpu().detach()).as_quat()).cuda().to(torch.float32)[:,[1,2,3,0]]
+                    # rots_q_retrack = torch.tensor(Rotation.from_matrix(rot_retrack.cpu().detach()).as_quat()).cuda().to(torch.float32)[:,[1,2,3,0]]
                     
                     if tracking_newframe:
-                        self.gaussians.add_from_pcd2_tensor(points_retrack, colors, rots_q_retrack, scales, z_values, trackable_filter)
+                        self.gaussians.add_from_pcd2_tensor(points, colors, rots, scales, z_values, trackable_filter)
                     else:
-                        self.gaussians.add_from_pcd2_tensor(points_retrack, colors, rots_q_retrack, scales, z_values, [])
+                        self.gaussians.add_from_pcd2_tensor(points, colors, rots, scales, z_values, [])
 
                     
 
-                    if self.shared_cam.cam_idx[0].item() == 0:
-                        # world2camera_retrack = copy.deepcopy(T_GCIP.cpu().detach())
-                        self.retrack_Rt_shared[0] =  torch.eye(4).float()
-                        self.retrack_ok_shared[0] = 0
-                    elif tracking_newframe:
-                        target_points, target_rots, target_scales  = self.gaussians.get_trackable_gaussians_tensor(self.trackable_opacity_th)
-                        self.shared_target_gaussians.input_values(target_points, target_rots, target_scales)
-                        self.target_gaussians_ready[0] = 1
-                        if len(self.mapping_cams) != 0 :
-                            world2camera_retrack = copy.deepcopy(T_retrack.cpu().detach())
-                            # world2camera_retrack = copy.deepcopy(T_GCIP.cpu().detach())
-                            self.retrack_Rt_shared[0] =  world2camera_retrack
-                            self.retrack_ok_shared[0] = 0
+                    # if self.shared_cam.cam_idx[0].item() == 0:
+                    # world2camera_retrack = copy.deepcopy(T_GCIP.cpu().detach())
+                    self.retrack_Rt_shared[0] =  torch.eye(4).float()
+                    self.retrack_ok_shared[0] = 0
+                    # if tracking_newframe:
+                    #     target_points, target_rots, target_scales  = self.gaussians.get_trackable_gaussians_tensor(self.trackable_opacity_th)
+                    #     self.shared_target_gaussians.input_values(target_points, target_rots, target_scales)
+                    #     self.target_gaussians_ready[0] = 1
+                    # elif tracking_newframe:
+                    #     target_points, target_rots, target_scales  = self.gaussians.get_trackable_gaussians_tensor(self.trackable_opacity_th)
+                    #     self.shared_target_gaussians.input_values(target_points, target_rots, target_scales)
+                    #     self.target_gaussians_ready[0] = 1
+                    #     if len(self.mapping_cams) != 0 :
+                    #         world2camera_retrack = copy.deepcopy(T_retrack.cpu().detach())
+                    #         # world2camera_retrack = copy.deepcopy(T_GCIP.cpu().detach())
+                    #         self.retrack_Rt_shared[0] =  world2camera_retrack
+                    #         self.retrack_ok_shared[0] = 0
                     # else:
                     #     if len(self.mapping_cams) != 0 :
                     #         world2camera_retrack = copy.deepcopy(T_retrack.cpu().detach())
@@ -431,8 +436,8 @@ class Mapper(SLAMParameters):
                         gt_image = viewpoint_cam.rgb_level_2.cuda()
                         gt_depth_image = viewpoint_cam.depth_level_2.cuda()
 
-                    self.gaussians.import_camera_rt(viewpoint_cam)
-                    self.gaussians.trans_gaussian_camera(viewpoint_cam)
+                    # self.gaussians.import_camera_rt(viewpoint_cam)
+                    # self.gaussians.trans_gaussian_camera(viewpoint_cam)
 
                     render_pkg = render_3(viewpoint_cam, self.gaussians, self.pipe, self.background, training_stage=self.training_stage)
                     iter1_num += 1

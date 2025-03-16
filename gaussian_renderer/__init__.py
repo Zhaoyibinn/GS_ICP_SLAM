@@ -250,6 +250,20 @@ def render_3(viewpoint_camera, pc : GaussianModel, pipe, bg_color : torch.Tensor
 
 
 
+    # raster_settings = GaussianRasterizationSettings(
+    #     image_height=resolution_height,
+    #     image_width=resolution_width,
+    #     tanfovx=tanfovx,
+    #     tanfovy=tanfovy,
+    #     bg=bg_color,
+    #     scale_modifier=scaling_modifier,
+    #     viewmatrix=viewmatrix_zero,
+    #     projmatrix=full_proj_transform_zero,
+    #     sh_degree=pc.active_sh_degree,
+    #     campos=camera_center_zero,
+    #     prefiltered=False,
+    #     debug=pipe.debug
+    # )
     raster_settings = GaussianRasterizationSettings(
         image_height=resolution_height,
         image_width=resolution_width,
@@ -257,17 +271,20 @@ def render_3(viewpoint_camera, pc : GaussianModel, pipe, bg_color : torch.Tensor
         tanfovy=tanfovy,
         bg=bg_color,
         scale_modifier=scaling_modifier,
-        viewmatrix=viewmatrix_zero,
-        projmatrix=full_proj_transform_zero,
+        viewmatrix=viewpoint_camera.world_view_transform,
+        projmatrix=viewpoint_camera.full_proj_transform,
         sh_degree=pc.active_sh_degree,
-        campos=camera_center_zero,
+        campos=viewpoint_camera.camera_center,
         prefiltered=False,
         debug=pipe.debug
     )
 
+
     rasterizer = GaussianRasterizer(raster_settings=raster_settings)
 
-    means3D = pc.get_xyz_camera
+    # means3D = pc.get_xyz_camera
+    means3D = pc.get_extratrans_xyz(int(viewpoint_camera.cam_idx[0]))
+    
     means2D = screenspace_points
     opacity = pc.get_opacity
 
@@ -281,7 +298,8 @@ def render_3(viewpoint_camera, pc : GaussianModel, pipe, bg_color : torch.Tensor
         cov3D_precomp = pc.get_covariance(scaling_modifier)
     else:
         scales = pc.get_scaling
-        rotations = pc.get_rotation_camera
+        # rotations = pc.get_rotation_camera
+        rotations = pc.get_extratrans_rotation(int(viewpoint_camera.cam_idx[0]))
 
     # If precomputed colors are provided, use them. Otherwise, if it is desired to precompute colors
     # from SHs in Python, do it. If not, then SH -> RGB conversion will be done by rasterizer.

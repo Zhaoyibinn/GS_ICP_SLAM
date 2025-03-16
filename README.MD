@@ -3,6 +3,8 @@
 # RGBD GS-ICP SLAM (100FPS Gaussian Splatting SLAM)
 
 赵逸彬正在对其进行改进
+## 分支
+这个分支是用来测试第二篇文章的算法的，就是不用奇奇怪怪的变换反变换，还是原本在那套在高斯上乘以一个Extra trans
 
 ## 日历文档
 ### 20250307

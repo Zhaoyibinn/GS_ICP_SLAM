@@ -24,7 +24,7 @@ import matplotlib.pyplot as plt
 
 import copy
 from scipy.spatial.transform import Rotation
-from pytorch3d.transforms import matrix_to_quaternion
+from pytorch3d.transforms import matrix_to_quaternion,quaternion_to_matrix
 import torch.nn.functional as F
 
 
@@ -112,6 +112,38 @@ class GaussianModel(nn.Module):
 
         self.rotation_activation = torch.nn.functional.normalize
 
+    def get_extratrans_xyz(self,idx):
+        # 每个视角的位姿都可以被优化了
+        # extra_tran = self.cal_extra_trans(idx)
+        extra_tran = self.extra_trans[idx]
+        # R = extra_tran[:3,:3]
+        R = torch.eye(3).cuda()
+
+        # t = torch.zeros_like(extra_tran[:3,3])
+        # t[0] = extra_tran[:3,3][0]
+        t = extra_tran[:3,3]
+
+        xyz = self._xyz
+
+        return (R @ xyz.T + t.unsqueeze(1)).T
+    
+    def get_extratrans_rotation(self,idx):
+        extra_tran = self.extra_trans[idx]
+        # extra_tran = self.cal_extra_trans(idx)
+        # R = extra_tran[:3,:3]
+        R = torch.eye(3).cuda()
+
+        # t = torch.zeros_like(extra_tran[:3,3])
+        # t[0] = extra_tran[:3,3][0]
+        t = extra_tran[:3,3]
+        q = self.rotation_activation(self._rotation)
+
+        matrix = quaternion_to_matrix(q)
+        trans_matrix = matrix @ R + t
+        trans_q = matrix_to_quaternion(trans_matrix)
+
+        return self.rotation_activation(trans_q)
+
 
     def __init__(self, sh_degree : int):
         super().__init__()
@@ -146,7 +178,13 @@ class GaussianModel(nn.Module):
         self._camera_t = nn.Parameter(torch.zeros(3).cuda().repeat(self.max_img_num,1).requires_grad_(False))
         
 
-        self.optimizer_noopt_key = ["camera_q","camera_t"]
+        self.optimizer_noopt_key = ["camera_q","camera_t","extra_trans"]
+
+        identity_matrix = torch.eye(4)
+        identity_matrices = identity_matrix.unsqueeze(0).repeat(5000, 1, 1).cuda()
+        self.extra_trans = nn.Parameter(identity_matrices.requires_grad_(True))
+
+        # self.extra_trans = torch.empty(0)
 
     def capture(self):
         return (
