@@ -467,8 +467,8 @@ class Mapper(SLAMParameters):
                         self.gaussians.optimizer.step()
                         self.gaussians.optimizer.zero_grad(set_to_none = True)
 
-                        self.gaussians.optimizer_camera.step()
-                        self.gaussians.optimizer_camera.zero_grad(set_to_none = True)
+                        # self.gaussians.optimizer_camera.step()
+                        # self.gaussians.optimizer_camera.zero_grad(set_to_none = True)
 
                     self.train_iter += 1
                 self.training = False   
@@ -555,6 +555,8 @@ class Mapper(SLAMParameters):
         psnrs = []
         ssims = []
         lpips = []
+
+        mapping_camera_idx = [cam.cam_idx.item() for cam in self.mapping_cams]
         
         cal_lpips = LearnedPerceptualImagePatchSimilarity(net_type='alex', normalize=True).to("cuda")
         original_resolution = True
@@ -568,6 +570,9 @@ class Mapper(SLAMParameters):
             os.makedirs(f"{self.output_path}/rendered/depth")  # 如果不存在，创建文件夹
         with torch.no_grad():
             for i in tqdm(range(len(image_names))):
+
+                if i not in mapping_camera_idx:
+                    continue
                 gt_depth_ = []
                 cam = self.mapping_cams[0]
                 c2w = final_poses[i]

@@ -51,3 +51,9 @@ render_time: 0.000487 | loss cal time: 0.003126 | loss back time: 0.030524
 由于多了一些pytorch的backward，会导致速度大大降低
 
 在增加了optimizer_camera之后测试了多轮训练，结果没有提升，与第二篇文章的结果不符，应该是有错误
+
+
+### 20250317
+修改了评估指标，现在只评估mapping key
+
+在 mp_Mapper.py 470 471取消注释后，结果会从20.63上升到24.06
