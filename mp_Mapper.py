@@ -174,11 +174,11 @@ class Mapper(SLAMParameters):
                 print("train_iter: ",self.train_iter)
                 last_record = self.train_iter
             
-            if self.end_of_dataset[0] and self.train_iter>9999:
-                break
-
-            # if self.end_of_dataset[0]:
+            # if self.end_of_dataset[0] and self.train_iter>9999:
             #     break
+
+            if self.end_of_dataset[0]:
+                break
             
             if self.verbose:
                 self.run_viewer()       
@@ -288,8 +288,8 @@ class Mapper(SLAMParameters):
                     loss_rgb = (1.0 - self.lambda_dssim) * Ll1 + self.lambda_dssim * (1.0 - L_ssim)
                     loss_d = Ll1_d
                     
-                    # loss = loss_rgb + 0.1*loss_d
-                    loss = loss_rgb
+                    loss = loss_rgb + 0.1*loss_d
+                    # loss = loss_rgb
                     # loss = loss_d
                     # loss = (1.0 - 0.6) * Ll1 + 0.6 * (1.0 - L_ssim)
                     # print("loss cal time:",time.time()-start)
@@ -308,9 +308,9 @@ class Mapper(SLAMParameters):
                             self.gaussians.optimizer.step()
                         self.gaussians.optimizer.zero_grad(set_to_none = True)
 
-                        # if train_idx!=0:
-                        #     self.gaussians.optimizer_camera.step()
-                        # self.gaussians.optimizer_camera.zero_grad(set_to_none = True)
+                        if train_idx!=0:
+                            self.gaussians.optimizer_camera.step()
+                        self.gaussians.optimizer_camera.zero_grad(set_to_none = True)
                         
                         # self.gaussians.optimizer.step()
                         
@@ -467,8 +467,8 @@ class Mapper(SLAMParameters):
                         self.gaussians.optimizer.step()
                         self.gaussians.optimizer.zero_grad(set_to_none = True)
 
-                        # self.gaussians.optimizer_camera.step()
-                        # self.gaussians.optimizer_camera.zero_grad(set_to_none = True)
+                        self.gaussians.optimizer_camera.step()
+                        self.gaussians.optimizer_camera.zero_grad(set_to_none = True)
 
                     self.train_iter += 1
                 self.training = False   
@@ -566,13 +566,16 @@ class Mapper(SLAMParameters):
         if not os.path.exists(f"{self.output_path}/rendered/rgb"):  # 检查文件夹是否存在
             os.makedirs(f"{self.output_path}/rendered/rgb")  # 如果不存在，创建文件夹
 
+        if not os.path.exists(f"{self.output_path}/rendered/rgb_diff"):  # 检查文件夹是否存在
+            os.makedirs(f"{self.output_path}/rendered/rgb_diff")  # 如果不存在，创建文件夹
+
         if not os.path.exists(f"{self.output_path}/rendered/depth"):  # 检查文件夹是否存在
             os.makedirs(f"{self.output_path}/rendered/depth")  # 如果不存在，创建文件夹
         with torch.no_grad():
             for i in tqdm(range(len(image_names))):
 
-                if i not in mapping_camera_idx:
-                    continue
+                # if i not in mapping_camera_idx:
+                #     continue
                 gt_depth_ = []
                 cam = self.mapping_cams[0]
                 c2w = final_poses[i]
@@ -614,7 +617,7 @@ class Mapper(SLAMParameters):
                 # ours_pag = render(cam, self.gaussians, self.pipe, self.background)
 
                 cam.cam_idx[0] = torch.tensor(i).to(torch.int32)
-                self.gaussians.import_camera_rt(cam)
+                self.gaussians.import_camera_rt_eval(cam)
                 self.gaussians.trans_gaussian_camera(cam)
                 ours_pag = render_3(cam, self.gaussians, self.pipe, self.background, training_stage=self.training_stage)
 
@@ -624,11 +627,13 @@ class Mapper(SLAMParameters):
 
                 rgb_name = f"{self.output_path}/rendered/rgb/{i}.png"
                 depth_name = f"{self.output_path}/rendered/depth/depth{i}.tiff"
+                rgb_diff_name = f"{self.output_path}/rendered/rgb_diff/{i}.png"
+
 
                 
 
-                # cv2.imwrite(rgb_name,cv2.cvtColor(np.transpose(np.array(ours_rgb_.cpu().detach()), (1, 2, 0)) * 255, cv2.COLOR_RGB2BGR))
-                # cv2.imwrite(depth_name,np.array(ours_depth_.cpu().detach())[0])
+                cv2.imwrite(rgb_name,cv2.cvtColor(np.transpose(np.array(ours_rgb_.cpu().detach()), (1, 2, 0)) * 255, cv2.COLOR_RGB2BGR))
+                cv2.imwrite(depth_name,np.array(ours_depth_.cpu().detach())[0])
 
 
                 ours_rgb_ = torch.clamp(ours_rgb_, 0., 1.).cuda()
@@ -638,7 +643,11 @@ class Mapper(SLAMParameters):
                 gt_rgb_ = gt_rgb_ * valid_depth_mask_
                 ours_rgb_ = ours_rgb_ * valid_depth_mask_
                 
+
                 square_error = (gt_rgb_-ours_rgb_)**2
+
+                cv2.imwrite(rgb_diff_name,cv2.cvtColor(np.transpose(np.array(abs(gt_rgb_-ours_rgb_).cpu().detach()), (1, 2, 0)) * 255, cv2.COLOR_RGB2BGR))
+
                 mse_error = torch.mean(torch.mean(square_error, axis=2))
                 psnr = mse2psnr(mse_error)
                 

@@ -43,6 +43,40 @@ class GaussianModel(nn.Module):
                 self._camera_quaternion[camera_idx] = quaternion
                 # self._camera_t = copy.deepcopy(nn.Parameter(t.requires_grad_(True)))
                 self._camera_t[camera_idx] = t
+                
+    def import_camera_rt_eval(self,camaera):
+        
+        camera_idx = camaera.cam_idx[0].item()
+        world2camera = camaera.world_view_transform.T
+        R = world2camera[:3,:3]
+        t = world2camera[:3,3]
+
+        # self._camera_quaternion = copy.deepcopy(nn.Parameter(quaternion.requires_grad_(True)))
+        with torch.no_grad():
+            if self._camera_quaternion[camera_idx].mean().item() ==0:
+
+                # world2camera_trans = self.last_key_trans_eval@world2camera
+                # R = world2camera_trans[:3,:3]
+                # t = world2camera_trans[:3,3]
+
+                rotation_obj = Rotation.from_matrix(R.cpu().detach())
+                quaternion = torch.tensor(rotation_obj.as_quat()).cuda()
+                self._camera_quaternion[camera_idx] = quaternion
+                # self._camera_t = copy.deepcopy(nn.Parameter(t.requires_grad_(True)))
+                self._camera_t[camera_idx] = t        
+            else:
+                R_poseopt = Rotation.from_quat(self._camera_quaternion[camera_idx].cpu().detach()).as_matrix()
+                t_poseopt = np.array(self._camera_t[camera_idx].cpu().detach())
+                T_poseopt = np.eye(4)
+                T_poseopt[:3,:3] = R_poseopt
+                T_poseopt[:3,3] = t_poseopt
+                T_poseopt = torch.tensor(T_poseopt).cuda().type(torch.float32)
+
+                T= world2camera
+
+                T_trans = T_poseopt @ T.inverse()
+
+                self.last_key_trans_eval = T_trans        
 
     def trans_gaussian_camera(self,camaera):
         transformed_gaussians = {}
@@ -144,6 +178,8 @@ class GaussianModel(nn.Module):
         self._camera_world_view_transform = torch.empty(0)
         self._camera_quaternion = nn.Parameter(torch.zeros(4).cuda().repeat(self.max_img_num,1).requires_grad_(False))
         self._camera_t = nn.Parameter(torch.zeros(3).cuda().repeat(self.max_img_num,1).requires_grad_(False))
+
+        self.last_key_trans_eval = None
         
 
         self.optimizer_noopt_key = ["camera_q","camera_t"]
